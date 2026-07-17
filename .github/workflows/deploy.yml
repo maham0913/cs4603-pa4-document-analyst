@@ -20,7 +20,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO: install uv, sync deps, run `ruff check` and the smoke test
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync --extra dev
+      - run: uv run ruff check agent/ client/
+      - run: uv run pytest -q
 
   deploy:
     needs: lint-and-test
@@ -28,4 +31,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO: install deps and run `python deployment/deploy.py` with secrets
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Deploy
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: uv run python deployment/deploy.py

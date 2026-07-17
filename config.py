@@ -35,6 +35,7 @@ def get_settings() -> dict[str, str]:
         "embeddings": os.environ.get("EMBEDDINGS_ENDPOINT", "databricks-gte-large-en"),
         "vs_endpoint": os.environ.get("VECTOR_SEARCH_ENDPOINT", ""),
         "vs_index": os.environ.get("VECTOR_SEARCH_INDEX", ""),
+        "mcp_server_url": os.environ.get("MCP_SERVER_URL", ""),
     }
 
 

@@ -11,7 +11,30 @@ Must import cleanly:  python -c "import deployment.agent_model"
 
 from __future__ import annotations
 
-# TODO: import os, mlflow, build_graph, get_chat_llm, get_retriever, load_mcp_tools
-# TODO: validate env vars
-# TODO: graph = build_graph(...)
-# TODO: mlflow.models.set_model(graph)
+import os
+
+import mlflow
+
+_REQUIRED = ("DATABRICKS_HOST", "DATABRICKS_TOKEN", "DATABRICKS_MODEL")
+_missing = [name for name in _REQUIRED if not os.environ.get(name)]
+if _missing:
+    raise OSError(
+        f"Missing required environment variable(s): {', '.join(_missing)}. "
+        "Set them in your .env (local) or the endpoint secret scope (deployed)."
+    )
+
+from agent.graph import build_graph, load_mcp_tools
+from config import get_chat_llm
+from rag.store import get_retriever
+
+_mcp_server = os.path.join(
+    os.path.dirname(os.path.dirname(__file__)), "tools", "mcp_server.py"
+)
+
+graph = build_graph(
+    llm=get_chat_llm(),
+    retriever=get_retriever(),
+    tools=load_mcp_tools(_mcp_server),
+)
+
+mlflow.models.set_model(graph)

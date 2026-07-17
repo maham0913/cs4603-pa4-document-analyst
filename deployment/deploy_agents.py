@@ -7,9 +7,20 @@ serving endpoint AND the Review App in one call. Print the endpoint + review URL
 
 from __future__ import annotations
 
+from deployment.deploy import log_and_register
+
 
 def main() -> None:
-    raise NotImplementedError("Bonus B: deploy with the databricks-agents SDK")
+    from databricks import agents
+
+    uc_name, version = log_and_register()
+    deployment = agents.deploy(
+        model_name=uc_name,
+        model_version=version,
+        scale_to_zero=True,
+    )
+    print(f"Endpoint name: {deployment.endpoint_name}")
+    print(f"Review app URL: {deployment.review_app_url}")
 
 
 if __name__ == "__main__":

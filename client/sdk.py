@@ -12,7 +12,12 @@ TODO: Implement `DocumentAnalystClient` and `AnalystClientError` per Task 3.1:
 
 from __future__ import annotations
 
+import json
+import os
+import time
 from collections.abc import Iterator
+
+import httpx
 
 
 class AnalystClientError(Exception):
@@ -31,13 +36,125 @@ class DocumentAnalystClient:
         timeout: float = 120.0,
         max_retries: int = 3,
     ) -> None:
-        raise NotImplementedError("Task 3.1: implement the client constructor")
+        self.endpoint_name = endpoint_name
+        self.host = (host or os.environ["DATABRICKS_HOST"]).rstrip("/")
+        self.token = token or os.environ["DATABRICKS_TOKEN"]
+        self.timeout = timeout
+        self.max_retries = max_retries
+        self._url = f"{self.host}/serving-endpoints/{endpoint_name}/invocations"
+        self._headers = {
+            "Authorization": f"Bearer {self.token}",
+            "Content-Type": "application/json",
+        }
 
     def ask(self, question: str) -> str:
-        raise NotImplementedError("Task 3.1: implement ask()")
+        payload = {"messages": [{"role": "user", "content": question}]}
+        started = time.time()
+
+        for attempt in range(self.max_retries + 1):
+            elapsed = time.time() - started
+            remaining = self.timeout - elapsed
+            if remaining <= 0:
+                raise TimeoutError(f"Request timed out after {elapsed:.2f}s")
+
+            try:
+                with httpx.Client(timeout=remaining) as client:
+                    response = client.post(
+                        self._url, headers=self._headers, json=payload
+                    )
+            except httpx.TimeoutException as exc:
+                elapsed = time.time() - started
+                raise TimeoutError(f"Request timed out after {elapsed:.2f}s") from exc
+
+            if response.status_code in (429, 503) and attempt < self.max_retries:
+                time.sleep(2**attempt)
+                continue
+
+            if response.status_code >= 400:
+                raise AnalystClientError(
+                    response.text,
+                    status_code=response.status_code,
+                    request_id=response.headers.get("x-request-id"),
+                )
+
+            data = response.json()
+            if "choices" in data:
+                return data["choices"][0]["message"]["content"]
+            if "messages" in data:
+                return data["messages"][-1]["content"]
+            return json.dumps(data)
+
+        raise AnalystClientError("Exhausted retries")
 
     def ask_streaming(self, question: str) -> Iterator[str]:
-        raise NotImplementedError("Task 3.1: implement ask_streaming()")
+        payload = {
+            "messages": [{"role": "user", "content": question}],
+            "stream": True,
+        }
+        started = time.time()
+
+        for attempt in range(self.max_retries + 1):
+            elapsed = time.time() - started
+            remaining = self.timeout - elapsed
+            if remaining <= 0:
+                raise TimeoutError(f"Request timed out after {elapsed:.2f}s")
+
+            try:
+                with httpx.Client(timeout=remaining) as client:
+                    with client.stream(
+                        "POST", self._url, headers=self._headers, json=payload
+                    ) as response:
+                        if (
+                            response.status_code in (429, 503)
+                            and attempt < self.max_retries
+                        ):
+                            response.read()
+                            time.sleep(2**attempt)
+                            continue
+
+                        if response.status_code >= 400:
+                            response.read()
+                            raise AnalystClientError(
+                                response.text,
+                                status_code=response.status_code,
+                                request_id=response.headers.get("x-request-id"),
+                            )
+
+                        yielded = False
+                        for line in response.iter_lines():
+                            if not line.startswith("data:"):
+                                continue
+                            data_str = line[5:].strip()
+                            if data_str == "[DONE]":
+                                break
+                            try:
+                                chunk = json.loads(data_str)
+                            except json.JSONDecodeError:
+                                continue
+                            choices = chunk.get("choices") or []
+                            if not choices:
+                                continue
+                            delta = choices[0].get("delta") or {}
+                            text = delta.get("content") or (
+                                choices[0].get("message") or {}
+                            ).get("content")
+                            if text:
+                                yielded = True
+                                yield text
+
+                        if not yielded:
+                            yield self.ask(question)
+                        return
+            except httpx.TimeoutException as exc:
+                elapsed = time.time() - started
+                raise TimeoutError(f"Request timed out after {elapsed:.2f}s") from exc
+
+        raise AnalystClientError("Exhausted retries")
 
     def health_check(self) -> bool:
-        raise NotImplementedError("Task 3.1: implement health_check()")
+        from databricks.sdk import WorkspaceClient
+
+        w = WorkspaceClient(host=self.host, token=self.token)
+        ep = w.serving_endpoints.get(self.endpoint_name)
+        ready = getattr(getattr(ep, "state", None), "ready", None)
+        return ready is not None and "READY" in str(ready).upper()
