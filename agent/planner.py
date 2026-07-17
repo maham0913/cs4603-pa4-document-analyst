@@ -15,6 +15,7 @@ import re
 from agent.prompts import PLANNER_PROMPT
 from agent.state import AnalystState
 
+
 def make_planner(llm):
     def planner(state: AnalystState) -> dict:
         user_question = state["messages"][-1].content
