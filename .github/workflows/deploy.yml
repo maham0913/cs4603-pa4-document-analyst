@@ -33,6 +33,27 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync
+      deploy:
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv sync
+      - name: Debug env (temporary)
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: |
+          echo "HOST length: ${#DATABRICKS_HOST}"
+          echo "HOST starts with https: $(echo $DATABRICKS_HOST | grep -c '^https://')"
+          echo "TOKEN length: ${#DATABRICKS_TOKEN}"
+      - name: Deploy
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        run: uv run python deployment/deploy.py
       - name: Deploy
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
