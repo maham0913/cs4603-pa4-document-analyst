@@ -1,11 +1,12 @@
-"""Vector Search retriever factory (Task 1.4 support / rag/store.py)."""
+﻿"""Vector Search retriever factory (Task 1.4 support / rag/store.py)."""
 
 from __future__ import annotations
 
 from config import get_settings
 
-# Only request columns that exist on the Delta Sync index.
-CITATION_COLUMNS = ["chunk_id", "source", "page", "chunk_to_retrieve"]
+# NOTE: "page" is NOT in CITATION_COLUMNS because the live index
+# (built via the notebook) does not have a page column yet.
+CITATION_COLUMNS = ["chunk_id", "source", "chunk_to_retrieve"]
 
 
 def get_vector_store():
@@ -21,8 +22,6 @@ def get_vector_store():
         index_name=s["vs_index"],
         endpoint=s["vs_endpoint"],
         columns=CITATION_COLUMNS,
-        # no text_column= — the index's embedding_source_column (chunk_to_embed)
-        # is auto-detected; passing text_column explicitly conflicts with it.
     )
 
 
