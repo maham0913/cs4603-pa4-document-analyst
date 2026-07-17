@@ -1,20 +1,10 @@
 # Bonus A — CI/CD pipeline (.github/workflows/deploy.yml)
-#
-# TODO: Implement a lint -> test -> deploy workflow.
-#   - lint:   ruff check on agent/ and client/
-#   - test:   a smoke test that imports and compiles the graph
-#   - deploy: ONLY on push to main; log the model, register a new UC version,
-#             and update the serving endpoint. Use GitHub Secrets for
-#             DATABRICKS_HOST / DATABRICKS_TOKEN. Add a workflow_dispatch trigger.
-
 name: deploy
-
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
-
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -24,16 +14,7 @@ jobs:
       - run: uv sync --extra dev
       - run: uv run ruff check agent/ client/
       - run: uv run pytest -q
-
   deploy:
-    needs: lint-and-test
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv sync
-      deploy:
     needs: lint-and-test
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -49,11 +30,6 @@ jobs:
           echo "HOST length: ${#DATABRICKS_HOST}"
           echo "HOST starts with https: $(echo $DATABRICKS_HOST | grep -c '^https://')"
           echo "TOKEN length: ${#DATABRICKS_TOKEN}"
-      - name: Deploy
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-        run: uv run python deployment/deploy.py
       - name: Deploy
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
