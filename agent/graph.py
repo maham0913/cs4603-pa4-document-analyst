@@ -30,9 +30,8 @@ def load_mcp_tools(server_path: str | None = None):
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
     if server_path is None:
-        server_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "tools", "mcp_server.py"
-        )
+        import tools.mcp_server as _mcp_module
+        server_path = _mcp_module.__file__
 
     mcp_url = os.environ.get("MCP_SERVER_URL")
     token = os.environ.get("DATABRICKS_TOKEN", "")
