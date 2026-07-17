@@ -82,16 +82,17 @@ def create_or_update_endpoint(uc_name: str, version: str) -> str:
 
     w = WorkspaceClient()
     config = EndpointCoreConfigInput(
-        served_entities=[
-            ServedEntityInput(
-                entity_name=uc_name,
-                entity_version=version,
-                workload_size="Small",
-                scale_to_zero_enabled=True,
-                environment_vars=environment_vars,
-            )
-        ]
-    )
+    name=endpoint_name,
+    served_entities=[
+        ServedEntityInput(
+            entity_name=uc_name,
+            entity_version=version,
+            workload_size="Small",
+            scale_to_zero_enabled=True,
+            environment_vars=environment_vars,
+        )
+    ]
+)
 
     existing = {e.name for e in w.serving_endpoints.list()}
     if endpoint_name in existing:
