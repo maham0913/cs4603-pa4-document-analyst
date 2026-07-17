@@ -37,4 +37,12 @@ jobs:
         env:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_MODEL: ${{ secrets.DATABRICKS_MODEL }}
+          VECTOR_SEARCH_ENDPOINT: ${{ secrets.VECTOR_SEARCH_ENDPOINT }}
+          VECTOR_SEARCH_INDEX: ${{ secrets.VECTOR_SEARCH_INDEX }}
+          EMBEDDINGS_ENDPOINT: ${{ secrets.EMBEDDINGS_ENDPOINT }}
+          UC_CATALOG: ${{ secrets.UC_CATALOG }}
+          UC_SCHEMA: ${{ secrets.UC_SCHEMA }}
+          SERVING_ENDPOINT_NAME: ${{ secrets.SERVING_ENDPOINT_NAME }}
+          SOURCE_TABLE: ${{ secrets.SOURCE_TABLE }}
         run: uv run python deployment/deploy.py
