@@ -9,10 +9,11 @@ TODO: Implement `make_planner(llm)` returning a node that:
 
 from __future__ import annotations
 
-from agent.state import AnalystState
-from agent.prompts import PLANNER_PROMPT
 import json
 import re
+
+from agent.prompts import PLANNER_PROMPT
+from agent.state import AnalystState
 
 def make_planner(llm):
     def planner(state: AnalystState) -> dict:
