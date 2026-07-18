@@ -1,14 +1,4 @@
-"""Full Document Analyst graph (Tasks 1.5 + 1.7).
-
-TODO:
-  - `load_mcp_tools(server_path=None)`: connect the GIVEN MCP server over stdio
-    (see langchain-mcp-adapters) and return its tools.
-  - `make_mcp_node(tools, llm)`: execute one calculation step by letting the LLM
-    call exactly one MCP tool, then append the result and increment the index.
-  - `build_graph(llm=None, retriever=None, tools=None)`: assemble
-    planner -> supervisor -> {rag_agent | mcp_tools} -> ... -> synthesizer.
-    Inject dependencies so the graph can be unit-tested offline with fakes.
-"""
+"""Full Document Analyst graph (Tasks 1.5 + 1.7)."""
 
 from __future__ import annotations
 
@@ -24,6 +14,31 @@ from agent.rag_agent import make_rag_agent
 from agent.state import AnalystState
 from agent.supervisor import MCP, RAG, SYNTH, make_supervisor, route_from_supervisor
 from agent.synthesizer import make_synthesizer
+
+
+def _has_real_fileno(stream) -> bool:
+    try:
+        stream.fileno()
+        return True
+    except Exception:
+        return False
+
+
+async def _get_tools_with_real_stdio(client):
+    """Databricks Model Serving replaces sys.stdout/stderr (and even
+    sys.__stdout__/sys.__stderr__) with a StreamToLogger object lacking
+    .fileno(), which the MCP stdio subprocess machinery requires. Swap in
+    real OS file descriptors for the duration of this call only.
+    """
+    orig_stdout, orig_stderr = sys.stdout, sys.stderr
+    try:
+        if not _has_real_fileno(sys.stdout):
+            sys.stdout = os.fdopen(1, "w", closefd=False)
+        if not _has_real_fileno(sys.stderr):
+            sys.stderr = os.fdopen(2, "w", closefd=False)
+        return await client.get_tools()
+    finally:
+        sys.stdout, sys.stderr = orig_stdout, orig_stderr
 
 
 def load_mcp_tools(server_path: str | None = None):
@@ -47,55 +62,19 @@ def load_mcp_tools(server_path: str | None = None):
             }
         )
     else:
-        # Databricks Model Serving replaces sys.stderr with a StreamToLogger
-        # object that lacks .fileno(), which stdio_client's default errlog
-        # (bound to sys.stderr at import time) requires. Pass a real file
-        # object explicitly so the subprocess's stderr piping works
-        # regardless of what sys.stderr has been swapped to.
-        errlog = open(os.devnull, "w")
         client = MultiServerMCPClient(
             {
                 "analyst": {
                     "command": sys.executable,
                     "args": [server_path],
                     "transport": "stdio",
-                    "errlog": errlog,
                 }
             }
         )
 
-    return asyncio.run(client.get_tools())
+    return asyncio.run(_get_tools_with_real_stdio(client))
 
 
-async def _get_tools_with_real_stdio(client):
-    """Temporarily swap sys.stdout/stderr for real files with .fileno()
-    while the stdio MCP subprocess is spawned. Databricks Model Serving
-    replaces sys.stdout/stderr with a StreamToLogger object that lacks
-    .fileno(), which the stdio subprocess machinery requires.
-    """
-    import os as _os
-
-    real_stdout, real_stderr = sys.stdout, sys.stderr
-    devnull_out = open(_os.devnull, "w")
-    devnull_err = open(_os.devnull, "w")
-    try:
-        if not hasattr(sys.stdout, "fileno") or not _has_working_fileno(sys.stdout):
-            sys.stdout = devnull_out
-        if not hasattr(sys.stderr, "fileno") or not _has_working_fileno(sys.stderr):
-            sys.stderr = devnull_err
-        return await client.get_tools()
-    finally:
-        sys.stdout, sys.stderr = real_stdout, real_stderr
-        devnull_out.close()
-        devnull_err.close()
-
-
-def _has_working_fileno(stream) -> bool:
-    try:
-        stream.fileno()
-        return True
-    except Exception:
-        return False
 def make_mcp_node(tools, llm):
     tool_map = {t.name: t for t in tools}
     llm_with_tools = llm.bind_tools(tools)
