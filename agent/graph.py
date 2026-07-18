@@ -16,31 +16,6 @@ from agent.supervisor import MCP, RAG, SYNTH, make_supervisor, route_from_superv
 from agent.synthesizer import make_synthesizer
 
 
-def _has_real_fileno(stream) -> bool:
-    try:
-        stream.fileno()
-        return True
-    except Exception:
-        return False
-
-
-async def _get_tools_with_real_stdio(client):
-    """Databricks Model Serving replaces sys.stdout/stderr (and even
-    sys.__stdout__/sys.__stderr__) with a StreamToLogger object lacking
-    .fileno(), which the MCP stdio subprocess machinery requires. Swap in
-    real OS file descriptors for the duration of this call only.
-    """
-    orig_stdout, orig_stderr = sys.stdout, sys.stderr
-    try:
-        if not _has_real_fileno(sys.stdout):
-            sys.stdout = os.fdopen(1, "w", closefd=False)
-        if not _has_real_fileno(sys.stderr):
-            sys.stderr = os.fdopen(2, "w", closefd=False)
-        return await client.get_tools()
-    finally:
-        sys.stdout, sys.stderr = orig_stdout, orig_stderr
-
-
 def load_mcp_tools(server_path: str | None = None):
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -72,8 +47,7 @@ def load_mcp_tools(server_path: str | None = None):
             }
         )
 
-    return asyncio.run(_get_tools_with_real_stdio(client))
-
+    return asyncio.run(client.get_tools())
 
 def make_mcp_node(tools, llm):
     tool_map = {t.name: t for t in tools}

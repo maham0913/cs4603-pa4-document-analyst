@@ -1,17 +1,30 @@
-"""MLflow models-from-code definition (Task 2.1).
-
-TODO: Make this file self-contained so MLflow can serialise it:
-  - validate DATABRICKS_HOST/TOKEN/MODEL at import time (clear error if missing),
-  - rebuild the graph with production clients (LLM, Vector Search retriever,
-    MCP tools),
-  - end with `mlflow.models.set_model(graph)`.
-
-Must import cleanly:  python -c "import deployment.agent_model"
-"""
+"""MLflow models-from-code definition (Task 2.1)."""
 
 from __future__ import annotations
 
 import os
+import sys
+
+# Databricks Model Serving replaces sys.stdout/sys.stderr with a
+# StreamToLogger object that lacks .fileno(). Several dependencies in this
+# model's import chain (mcp, databricks-mcp, langchain-mcp-adapters) bind
+# sys.stderr as a default argument at *import time*, so this must run before
+# any other import in this file -- patching later is too late.
+def _ensure_real_fileno_streams() -> None:
+    def _has_fileno(stream) -> bool:
+        try:
+            stream.fileno()
+            return True
+        except Exception:
+            return False
+
+    if not _has_fileno(sys.stdout):
+        sys.stdout = os.fdopen(1, "w", closefd=False)
+    if not _has_fileno(sys.stderr):
+        sys.stderr = os.fdopen(2, "w", closefd=False)
+
+
+_ensure_real_fileno_streams()
 
 import mlflow
 
