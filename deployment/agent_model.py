@@ -34,7 +34,7 @@ _mcp_server = os.path.join(
 graph = build_graph(
     llm=get_chat_llm(),
     retriever=get_retriever(),
-    tools=load_mcp_tools(_mcp_server),
+    tools=load_mcp_tools(),
 )
 
 mlflow.models.set_model(graph)
