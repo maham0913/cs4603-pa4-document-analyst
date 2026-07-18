@@ -16,6 +16,21 @@ from agent.supervisor import MCP, RAG, SYNTH, make_supervisor, route_from_superv
 from agent.synthesizer import make_synthesizer
 
 
+def _run_async(coro):
+    """Run a coroutine safely whether or not an event loop is already
+    running (e.g. inside Jupyter/ipykernel)."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import concurrent.futures
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(asyncio.run, coro)
+        return future.result()
+
+
 def load_mcp_tools(server_path: str | None = None):
     from langchain_mcp_adapters.client import MultiServerMCPClient
 
@@ -47,7 +62,11 @@ def load_mcp_tools(server_path: str | None = None):
             }
         )
 
-    return asyncio.run(client.get_tools())
+    # Jupyter/ipykernel already runs an event loop, so asyncio.run() would
+    # raise "cannot be called from a running event loop". _run_async handles
+    # both the script and notebook cases.
+    return _run_async(client.get_tools())
+
 
 def make_mcp_node(tools, llm):
     tool_map = {t.name: t for t in tools}
@@ -73,7 +92,8 @@ def make_mcp_node(tools, llm):
                 name = tc["name"] if isinstance(tc, dict) else tc.get("name")
                 args = tc["args"] if isinstance(tc, dict) else tc.get("args", {})
                 tool = tool_map[name]
-                out = tool.invoke(args)
+                # MCP-derived StructuredTools only support async invocation.
+                out = _run_async(tool.ainvoke(args))
                 result_text += str(out) + "\n"
         else:
             result_text = (ai_msg.content or "").strip() or "No tool was called"

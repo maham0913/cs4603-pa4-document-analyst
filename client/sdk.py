@@ -1,6 +1,6 @@
 """Python client SDK for the deployed Document Analyst (Part 3).
 
-TODO: Implement `DocumentAnalystClient` and `AnalystClientError` per Task 3.1:
+Implements `DocumentAnalystClient` and `AnalystClientError` per Task 3.1:
   - __init__(endpoint_name, host=None, token=None, timeout=120.0, max_retries=3):
     read DATABRICKS_HOST/DATABRICKS_TOKEN from env when not provided.
   - ask(question) -> str
@@ -25,6 +25,27 @@ class AnalystClientError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.request_id = request_id
+
+
+def _extract_content_from_json(data) -> str:
+    """Pull the answer text out of the deployed endpoint's JSON response.
+
+    The response may arrive as a plain dict (OpenAI-style {"choices": [...]}
+    or the raw LangGraph {"messages": [...]} contract), or as a list
+    containing a single such object (seen from this endpoint in practice).
+    Handle both shapes rather than assuming a dict at the top level.
+    """
+    if isinstance(data, list) and data:
+        data = data[0]
+
+    if isinstance(data, dict):
+        if "choices" in data and data["choices"]:
+            return data["choices"][0]["message"]["content"]
+        if "messages" in data and data["messages"]:
+            last = data["messages"][-1]
+            return last.get("content", str(last)) if isinstance(last, dict) else str(last)
+
+    return json.dumps(data)
 
 
 class DocumentAnalystClient:
@@ -78,11 +99,7 @@ class DocumentAnalystClient:
                 )
 
             data = response.json()
-            if "choices" in data:
-                return data["choices"][0]["message"]["content"]
-            if "messages" in data:
-                return data["messages"][-1]["content"]
-            return json.dumps(data)
+            return _extract_content_from_json(data)
 
         raise AnalystClientError("Exhausted retries")
 
@@ -114,6 +131,15 @@ class DocumentAnalystClient:
 
                         if response.status_code >= 400:
                             response.read()
+                            # This deployed model doesn't implement
+                            # predict_stream, so the endpoint rejects
+                            # streaming requests outright with a 400
+                            # rather than silently falling back. Detect
+                            # that specific case and fall back to a
+                            # normal, non-streaming ask() ourselves.
+                            if b"does not support streaming" in response.content:
+                                yield self.ask(question)
+                                return
                             raise AnalystClientError(
                                 response.text,
                                 status_code=response.status_code,
