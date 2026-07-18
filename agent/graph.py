@@ -68,6 +68,22 @@ def load_mcp_tools(server_path: str | None = None):
     return _run_async(client.get_tools())
 
 
+def _call_tool_sync(tool, args):
+    """Call a tool with whatever invocation style it supports.
+
+    Real MCP-derived StructuredTools only implement async invocation
+    (ainvoke) and raise NotImplementedError on sync .invoke(). Test
+    doubles / plain LangChain tools may only implement sync invoke.
+    Try async first when available, fall back to sync otherwise.
+    """
+    if hasattr(tool, "ainvoke"):
+        try:
+            return _run_async(tool.ainvoke(args))
+        except NotImplementedError:
+            pass
+    return tool.invoke(args)
+
+
 def make_mcp_node(tools, llm):
     tool_map = {t.name: t for t in tools}
     llm_with_tools = llm.bind_tools(tools)
@@ -92,8 +108,7 @@ def make_mcp_node(tools, llm):
                 name = tc["name"] if isinstance(tc, dict) else tc.get("name")
                 args = tc["args"] if isinstance(tc, dict) else tc.get("args", {})
                 tool = tool_map[name]
-                # MCP-derived StructuredTools only support async invocation.
-                out = _run_async(tool.ainvoke(args))
+                out = _call_tool_sync(tool, args)
                 result_text += str(out) + "\n"
         else:
             result_text = (ai_msg.content or "").strip() or "No tool was called"
