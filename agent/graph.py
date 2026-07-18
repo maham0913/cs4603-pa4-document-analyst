@@ -47,17 +47,24 @@ def load_mcp_tools(server_path: str | None = None):
             }
         )
     else:
+        # Databricks Model Serving replaces sys.stderr with a StreamToLogger
+        # object that lacks .fileno(), which stdio_client's default errlog
+        # (bound to sys.stderr at import time) requires. Pass a real file
+        # object explicitly so the subprocess's stderr piping works
+        # regardless of what sys.stderr has been swapped to.
+        errlog = open(os.devnull, "w")
         client = MultiServerMCPClient(
             {
                 "analyst": {
                     "command": sys.executable,
                     "args": [server_path],
                     "transport": "stdio",
+                    "errlog": errlog,
                 }
             }
         )
 
-    return asyncio.run(_get_tools_with_real_stdio(client))
+    return asyncio.run(client.get_tools())
 
 
 async def _get_tools_with_real_stdio(client):
